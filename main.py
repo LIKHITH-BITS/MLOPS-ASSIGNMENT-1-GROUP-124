@@ -29,7 +29,7 @@ def load_and_preprocess_images(base_dir, img_size):
     return np.array(images), np.array(labels)
 
 
-def split_data(images, labels, split_ratio=0.2):
+def split_data(images, labels, split_ratio=0.1):
     return train_test_split(images, labels, test_size=split_ratio, random_state=42)
 
 

@@ -6,34 +6,10 @@ on:
       - main   # Trigger workflow on pushes to the 'main' branch
     paths:
       - 'test/**' # Only trigger if changes are made in the 'res' folder
+      - 'main.py' # Only trigger if changes are made in the 'main.py' file
 
 jobs:
-  process_files:
-    runs-on: ubuntu-latest
-
-    steps:
-      # Step 1: Checkout the repository
-      - name: Checkout Code
-        uses: actions/checkout@v3
-
-      # Step 2: Set up Python environment
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-
-      # Step 3: Install dependencies
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      # Step 4: Run the application script
-      - name: Run App Script
-        run: python app.py
-        working-directory: res/test_path
-
-  model_training:
+  model_training_and_classifing:
     runs-on: ubuntu-latest
 
     steps:
@@ -56,3 +32,8 @@ jobs:
       # Step 4: Run the model training script
       - name: Train Model
         run: python main.py
+      
+      # Step 5: Run the application script
+      - name: Run App Script
+        run: python app.py
+        working-directory: test
