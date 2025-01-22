@@ -7,6 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from pathlib import Path
 from xgboost import XGBClassifier
+import lightgbm as lgb
 
 PARENT_DIR = os.path.dirname(os.getcwd())
 BASE_DIR = os.getcwd() + "/dataset"  # Contains 'dog' and 'cat' subfolders
@@ -46,17 +47,14 @@ def prepare_directories(working_dir):
 
 
 def train_classifier(train_images, train_labels):
-    classifier = XGBClassifier(
-        n_estimators=100,
-        max_depth=6,
-        learning_rate=0.1,
-        objective="binary:logistic",
-        use_label_encoder=False,
-        eval_metric="logloss",
-        random_state=42,
+    classifier = lgb.LGBMClassifier(
+        n_estimators=500,           # Number of boosting rounds
+        learning_rate=0.05,         # Smaller values help generalization
+        max_depth=6,                # Maximum tree depth
+        random_state=42             # Ensure reproducibility
     )
     classifier.fit(train_images, train_labels)
-    print("Model training completed using XGBoost.")
+    print("Model training completed using LightGBM.")
     return classifier
 
 
