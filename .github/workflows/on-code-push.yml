@@ -6,8 +6,6 @@ on:
       - main   # Trigger workflow on pushes to the 'main' branch
     paths:
       - 'test/**' # Only trigger if changes are made in the 'res' folder
-      - 'main.py'
-      - 'app.py'
 
 jobs:
   process_files:
