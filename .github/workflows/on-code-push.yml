@@ -36,4 +36,3 @@ jobs:
       # Step 5: Run the application script
       - name: Run App Script
         run: python app.py
-        working-directory: test
