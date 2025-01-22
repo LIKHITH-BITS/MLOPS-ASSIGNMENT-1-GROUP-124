@@ -7,6 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from pathlib import Path
 
+PARENT_DIR = os.path.dirname(os.getcwd())
 BASE_DIR = os.getcwd() + "/dataset"  # Contains 'dog' and 'cat' subfolders
 WORKING_DIR = os.getcwd() + "/working_dir"  # Directory for split data
 RESULTS_DIR = os.getcwd() + "/results"  # Directory to store predictions
@@ -74,3 +75,5 @@ if __name__ == "__main__":
     # Save the model if necessary (optional)
     from joblib import dump
     dump(classifier, "model.joblib")
+
+    os.chdir(PARENT_DIR)
