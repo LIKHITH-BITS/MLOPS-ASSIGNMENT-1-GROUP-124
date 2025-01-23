@@ -1,96 +1,146 @@
-import os
-import shutil
+import onnxruntime as ort
 import numpy as np
-from PIL import Image
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
-from pathlib import Path
-from xgboost import XGBClassifier
-import lightgbm as lgb
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn_extra.cluster import ResNet
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, accuracy_score
+from joblib import dump, load
+from pathlib import Path
+from PIL import Image
+import shutil
 
-PARENT_DIR = os.path.dirname(os.getcwd())
-BASE_DIR = os.getcwd() + "/dataset"  # Contains 'dog' and 'cat' subfolders
-WORKING_DIR = os.getcwd() + "/working_dir"  # Directory for split data
-RESULTS_DIR = os.getcwd() + "/results"  # Directory to store predictions
-IMG_SIZE = (150, 150)  # Resize images to this size
+import requests
 
-def load_and_preprocess_images(base_dir, img_size):
-    labels, images = [], []
+url = "https://github.com/onnx/models/raw/main/vision/classification/resnet/model/resnet50-v1-12.onnx"
+output_path = "resnet50.onnx"
 
-    for label, folder in enumerate(["Cat", "Dog"]):
-        folder_path = Path(base_dir, folder)
-        for img_path in folder_path.glob("*.jpg"):
-            try:
-                img = Image.open(img_path).convert("L")  # Convert to grayscale
-                img = img.resize(img_size)
-                images.append(np.array(img).flatten())
-                labels.append(label)
-            except Exception as e:
-                print(f"Error loading {img_path}: {e}")
-
-    return np.array(images), np.array(labels)
+print("Downloading ResNet-50 ONNX model...")
+response = requests.get(url, stream=True)
+if response.status_code == 200:
+    with open(output_path, "wb") as f:
+        f.write(response.content)
+    print(f"Model downloaded and saved as {output_path}")
+else:
+    print("Failed to download the model. Check the URL or your internet connection.")
 
 
-def split_data(images, labels, split_ratio=0.2):
-    return train_test_split(images, labels, test_size=split_ratio, random_state=42)
+# Define constants
+IMG_SIZE = (224, 224)
+RESULTS_DIR = "results"
+ONNX_MODEL_PATH = "resnet50.onnx"
 
+# Load ONNX model
+def load_onnx_model(model_path):
+    session = ort.InferenceSession(model_path)
+    input_name = session.get_inputs()[0].name
+    return session, input_name
 
-def prepare_directories(working_dir):
-    train_dir = Path(working_dir, "train")
-    val_dir = Path(working_dir, "validation")
-    for folder in [train_dir, val_dir]:
-        folder.mkdir(parents=True, exist_ok=True)
-        for sub_folder in ["dog", "cat"]:
-            Path(folder, sub_folder).mkdir(parents=True, exist_ok=True)
-    return train_dir, val_dir
+# Preprocess a single image
+def preprocess_image(img_path, img_size):
+    img = Image.open(img_path).resize(img_size).convert("RGB")
+    img_array = np.array(img, dtype=np.float32).transpose(2, 0, 1)  # Channels first
+    img_array = img_array / 255.0  # Normalize
+    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
+    return img_array
 
+# Extract features for a single image
+def extract_features(session, input_name, img_array):
+    outputs = session.run(None, {input_name: img_array})
+    return outputs[0].flatten()  # Flatten the feature vector
 
-def extract_resnet_features(images, img_size):
-    """Use ResNet to extract features."""
-    resnet = ResNet(pretrained=True, input_size=img_size)
-    return resnet.fit_transform(images)
+# Extract features for the entire dataset
+def extract_features_for_dataset(session, input_name, img_paths, img_size):
+    features = []
+    for img_path in img_paths:
+        img_array = preprocess_image(img_path, img_size)
+        features.append(extract_features(session, input_name, img_array))
+    return np.array(features)
 
-def train_classifier(train_images, train_labels):
-    train_features = extract_resnet_features(train_images, IMG_SIZE)
-    classifier = GradientBoostingClassifier(
-        n_estimators=100, 
-        learning_rate=0.1, 
-        max_depth=6, 
-        random_state=42
-    )
+# Train a Scikit-learn classifier
+def train_classifier(train_features, train_labels):
+    classifier = GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, max_depth=5, random_state=42)
     classifier.fit(train_features, train_labels)
-    print("Model training completed using Gradient Boosting with ResNet features.")
+    print("Model training completed.")
     return classifier
 
+# Save the trained model
+def save_model(classifier, filename="dog_cat_classifier.joblib"):
+    dump(classifier, filename)
+    print(f"Model saved as {filename}")
 
-def evaluate_model(classifier, test_images, test_labels):
-    predictions = classifier.predict(test_images)
-    accuracy = accuracy_score(test_labels, predictions)
-    print(f"Accuracy: {accuracy * 100:.2f}%")
+# Load a saved model
+def load_saved_model(filename="dog_cat_classifier.joblib"):
+    classifier = load(filename)
+    print(f"Model loaded from {filename}")
+    return classifier
 
+# Predict and move an image to the appropriate folder
+def predict_and_move_image(classifier, session, input_name, img_path, results_dir, img_size):
+    results_path = Path(results_dir)
+    for folder in ["cat", "dog", "not_cat_dog"]:
+        (results_path / folder).mkdir(parents=True, exist_ok=True)
 
+    try:
+        # Preprocess and extract features
+        img_array = preprocess_image(img_path, img_size)
+        features = extract_features(session, input_name, img_array).reshape(1, -1)
+
+        # Predict class
+        prediction = classifier.predict(features)[0]
+        if prediction == 0:
+            target_folder = results_path / "cat"
+            print(f"{img_path} is a Cat.")
+        elif prediction == 1:
+            target_folder = results_path / "dog"
+            print(f"{img_path} is a Dog.")
+        else:
+            target_folder = results_path / "not_cat_dog"
+            print(f"{img_path} is not a Cat or Dog.")
+
+        # Move image
+        img_name = Path(img_path).name
+        shutil.move(img_path, target_folder / img_name)
+        print(f"Moved {img_name} to {target_folder}")
+
+    except Exception as e:
+        print(f"Error processing image {img_path}: {e}")
+
+# Main workflow
 if __name__ == "__main__":
-    # Step 1: Load and preprocess data
-    print("Loading and preprocessing images...")
-    images, labels = load_and_preprocess_images(BASE_DIR, IMG_SIZE)
+    # Paths
+    cat_dir = "path/to/cat"
+    dog_dir = "path/to/dog"
+    onnx_model_path = ONNX_MODEL_PATH
 
-    # Step 2: Split data
-    print("Splitting data into training")
-    train_images, test_images, train_labels, test_labels = split_data(images, labels)
+    # Load image paths and labels
+    cat_images = list(Path(cat_dir).glob("*.jpg"))
+    dog_images = list(Path(dog_dir).glob("*.jpg"))
+    all_images = cat_images + dog_images
+    labels = [0] * len(cat_images) + [1] * len(dog_images)  # 0 for cats, 1 for dogs
 
-    # Step 3: Train the classifier
-    print("Training the classifier...")
-    classifier = train_classifier(train_images, train_labels)
+    # Split dataset
+    train_imgs, test_imgs, train_labels, test_labels = train_test_split(all_images, labels, test_size=0.2, random_state=42)
 
-    # Step 4: Evaluate the classifier
-    print("Evaluating the classifier...")
-    evaluate_model(classifier, test_images, test_labels)
+    # Load ONNX model
+    session, input_name = load_onnx_model(onnx_model_path)
 
-    # Save the model if necessary (optional)
-    from joblib import dump
-    dump(classifier, "model.joblib")
+    # Extract features for training and testing
+    print("Extracting features for training...")
+    train_features = extract_features_for_dataset(session, input_name, train_imgs, IMG_SIZE)
+    print("Extracting features for testing...")
+    test_features = extract_features_for_dataset(session, input_name, test_imgs, IMG_SIZE)
 
-    os.chdir(PARENT_DIR)
+    # Train the classifier
+    classifier = train_classifier(train_features, train_labels)
+
+    # Save the model
+    save_model(classifier)
+
+    # Evaluate the model
+    print("Evaluating model...")
+    predictions = classifier.predict(test_features)
+    print(classification_report(test_labels, predictions))
+    print(f"Accuracy: {accuracy_score(test_labels, predictions)}")
+
+    # Test single image prediction and move
+    sample_img_path = "path/to/sample_image.jpg"
+    predict_and_move_image(classifier, session, input_name, sample_img_path, RESULTS_DIR, IMG_SIZE)

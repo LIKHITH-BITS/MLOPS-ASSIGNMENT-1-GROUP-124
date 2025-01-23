@@ -3,4 +3,4 @@ pillow
 scikit-learn
 xgboost
 lightgbm
-scikit-learn-extra
+onnxruntime
