@@ -8,6 +8,8 @@ from sklearn.metrics import accuracy_score
 from pathlib import Path
 from xgboost import XGBClassifier
 import lightgbm as lgb
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn_extra.cluster import ResNet
 
 PARENT_DIR = os.path.dirname(os.getcwd())
 BASE_DIR = os.getcwd() + "/dataset"  # Contains 'dog' and 'cat' subfolders
@@ -46,15 +48,21 @@ def prepare_directories(working_dir):
     return train_dir, val_dir
 
 
+def extract_resnet_features(images, img_size):
+    """Use ResNet to extract features."""
+    resnet = ResNet(pretrained=True, input_size=img_size)
+    return resnet.fit_transform(images)
+
 def train_classifier(train_images, train_labels):
-    classifier = lgb.LGBMClassifier(
-        n_estimators=500,           # Number of boosting rounds
-        learning_rate=0.05,         # Smaller values help generalization
-        max_depth=6,                # Maximum tree depth
-        random_state=42             # Ensure reproducibility
+    train_features = extract_resnet_features(train_images, IMG_SIZE)
+    classifier = GradientBoostingClassifier(
+        n_estimators=100, 
+        learning_rate=0.1, 
+        max_depth=6, 
+        random_state=42
     )
-    classifier.fit(train_images, train_labels)
-    print("Model training completed using LightGBM.")
+    classifier.fit(train_features, train_labels)
+    print("Model training completed using Gradient Boosting with ResNet features.")
     return classifier
 
 
