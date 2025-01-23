@@ -13,7 +13,7 @@ import requests
 url = "https://github.com/onnx/models/raw/main/vision/classification/resnet/model/resnet50-v1-12.onnx"
 output_path = "resnet50.onnx"
 
-print("Downloading ResNet-50 ONNX model...")
+print("Downloading ResNet-50 ONNX model locally...")
 response = requests.get(url, stream=True)
 if response.status_code == 200:
     with open(output_path, "wb") as f:
